@@ -1,0 +1,587 @@
+---
+title: "Cyclistic Bike-share Analysis"
+author: "Momoh Alvin"
+date: "2022-07-14"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+## [Business task]{.underline}
+
+How do annual members and casual riders use Cyclistic bikes differently?
+
+## [Data source used]{.underline}
+
+Cyclistic's historical trip data was used to analyze and identify trends.[Click](https://divvy-tripdata.s3.amazonaws.com/index.html){.uri} for the previous 12 months of Cyclistic trip data. (Note: The datasets have a different name because Cyclistic is a fictional company. The data has been made available by Motivate International Inc. under this [license](https://ride.divvybikes.com/data-license-agreement){.uri}. This public data was used to explore how different customer types are using Cyclistic bikes.
+
+## [Cyclistic Trip Data Cleaning]{.underline}
+
+#### Google Sheets
+
+Google Sheets was used to get a quick view of the entire Cyclistic Data set, to check if rows with missing values are present, to check for duplicate rows, then checked for other errors and Understanding the data.
+
+#### Data cleaning with python
+
+``` python
+import pandas as pd
+```
+
+``` python
+file_names = ["202101-divvy-tripdata.csv", "202102-divvy-tripdata.csv", "202103-divvy-tripdata.csv", "202104-divvy-tripdata.csv", "202105-divvy-tripdata.csv", "202106-divvy-tripdata.csv", "202107-divvy-tripdata.csv", "202108-divvy-tripdata.csv", "202109-divvy-tripdata.csv", "202110-divvy-tripdata.csv", "202111-divvy-tripdata.csv", "202112-divvy-tripdata.csv"]
+```
+
+``` python
+a = 0 
+num = "01"
+for names in range(len(file_names)):
+  # file name position in file_names
+  name = file_names[a]
+
+  # load data
+  df = pd.read_csv(name)
+
+  # drop rows with missing values (since there are no specifics on how to treat missing values)
+  df = df.dropna()
+  
+#Date Manipulation
+
+  #convert datatype to string
+  bb = df[["started_at", "ended_at"]].astype("string")
+
+  # temprary variables for string manipulation
+  f4 = bb["started_at"].str.slice(stop = 4)
+  n4 = bb["started_at"].str.slice(start = 4, stop = 8)
+  l2 = bb["started_at"].str.slice(start = 8, stop = 10)
+  rs = bb["started_at"].str.slice(start = 11)
+
+  f41 = bb["ended_at"].str.slice(stop = 4)
+  n41 = bb["ended_at"].str.slice(start = 4, stop = 8)
+  l21 = bb["ended_at"].str.slice(start = 8, stop = 10)
+  rs1 = bb["ended_at"].str.slice(start = 11)
+
+  bn = l2 + n4 + f4
+  bn1 = l21 + n41 + f41
+
+  #convert columns to datetime
+  df["started_at"] = pd.to_datetime(bn) + pd.to_timedelta(rs)
+  df["ended_at"] = pd.to_datetime(bn1) + pd.to_timedelta(rs1)
+
+  # get the amount of time bikes were used (duration of use)
+  df["duration_min"] = df["ended_at"] - df["started_at"]
+
+  df = df.sort_values("duration_min")
+
+
+  #convert time to int
+  df["duration_min"] = df["duration_min"].dt.total_seconds().astype(int)
+
+  #filter data to get rid of abnormalities
+  #(some days had bike usage above 24 hours. Since there is no data
+  # how those should be dealt with, days above  24 hours where filtere
+  #and droped)
+  df = df[(df["duration_min"] > 60) & (df["duration_min"] < 86340)]
+
+  #duration_min  to minutes
+  df["duration_min"] = df["duration_min"] / 60
+
+  # created day of week column
+  df["week_day"] = df["ended_at"].dt.day_name()
+
+  #data to be exported
+  df = df[["started_at", "ended_at", "member_casual", "duration_min", "week_day"]]
+
+  # export adjusted file
+  df.to_csv("Cycl_trip_data_2021_" + num + ".csv", index = False #to adjust each file name)
+
+  # incrementing num and a
+  num = str(int(num) + 1)
+  a += 1 
+```
+
+## [Summary of data]{.underline}
+
+#### summary in BigQuery
+
+##### Combining all data
+
+``` sql
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.ccyl\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_2\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_3\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_4\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_5\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_6\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_7\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_8\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_9\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_10\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_11\`
+
+UNION ALL
+
+SELECT \*
+
+FROM \`cyclistic-345018.cln_cyl_data.cyl_12\`
+```
+
+##### Data grouped into weeks
+
+``` sql
+SELECT  
+member_casual,
+ryd_week,
+ROUND(AVG(duration_in_min), 2) AS avg_dur_week,
+ROUND(SUM (duration_in_min), 2) AS total_dur_wkly
+FROM `cyclistic-345018.cln_cyl_data.cln_cyl_f1`
+GROUP BY member_casual, ryd_week
+ORDER BY ryd_week
+```
+
+##### Data grouped into months
+
+``` sql
+SELECT  
+ryd_month,
+member_casual,
+ROUND(AVG(duration_in_min), 2) AS avg_dur_mnt,
+ROUND(SUM (duration_in_min), 2) AS total_dur_mnt
+FROM `cyclistic-345018.cln_cyl_data.cln_cyl_f1`
+GROUP BY member_casual, ryd_month, ryd_mnt_num
+ORDER BY ryd_mnt_num
+```
+
+##### Grouping by Subscription
+
+``` sql
+SELECT  
+member_casual,
+ROUND(AVG(duration_in_min), 2) AS avg_du_yr,
+ROUND(SUM (duration_in_min), 2) AS total_dur_yr
+FROM `cyclistic-345018.cln_cyl_data.cln_cyl_f1`
+GROUP BY member_casual
+```
+
+## [visualizations and key findings]{.underline}
+
+#### Importing Cyclistic Data from Google Sheets
+
+Weekly Data (wkly_df), Monthly Data(mntly_df), Year's Data(yrs_df)
+
+```{r}
+wkly_data <- "https://docs.google.com/spreadsheets/d/e/2PACX-1vTcUdnCUI1phbae7bvjsKS8gLzloQqBtFJBPjoQiCxvV1YQ_igsJBoaZh9N1um9s-rS90dXTFO6oxIk/pub?output=csv"
+mntly_data <- "https://docs.google.com/spreadsheets/d/e/2PACX-1vT_Z-wpKRvAD4UPwEvvopa4ioujaWVMr5vxdewZZ4uDtVUuze-oAuf736n04AuJirK-BiEkDgXpTpfd/pub?output=csv"
+
+years_data <- "https://docs.google.com/spreadsheets/d/e/2PACX-1vSElKjjGf55ByzlNC1kv05mxNYCOaqJuzxqLQT7etMZTmtti-2umr0h344ws1IsfcUvHUJ2CJ7jNPOt/pub?output=csv"
+```
+
+```{r}
+wk_df <- read.csv(url(wkly_data))
+```
+
+```{r}
+library(magrittr)
+library(dplyr)
+library(stringr) 
+library(ggplot2)
+
+
+# to create a column that adds "wk"(week) to ride_week 
+wk_df["rd_week"] <- sub("^", "wk", as.character(wk_df$ryd_week))
+
+# to create a column that renames member_casual
+wk_df$subscription <- wk_df$member_casual%>%str_replace_all(c("member" = "annual subs", "casual" = "casual riders"))
+
+# to create a column that reduces the values shown on the x axis 
+wk_df$time <- round((wk_df$total_dur_wkly/ 10000), 2)
+
+
+
+# To split average duration into annual memberships and  casual riders to get their individual min and max duration 
+member_df <- wk_df%>%filter(member_casual == "member")
+MAXm <- max(member_df %>% select(avg_dur_week))
+MINm <- min(member_df %>% select(avg_dur_week))
+
+
+casual_df <- wk_df%>%filter(member_casual == "casual")
+MAXc <- max(casual_df %>% select(avg_dur_week))
+MINc <- min(casual_df %>% select(avg_dur_week))
+wka_df <- wk_df%>%select(member_casual, ryd_week, avg_dur_week, rd_week, subscription, time)
+
+
+```
+
+### Weekly Data Set
+
+`head(wka_df, 10)`
+
+```{r, width= 8}
+head(wka_df,  10)
+```
+
+| member_casual | Member/Casual | Ride Week | Average Duration | Ride Week (adjusted) | Subscription  |
+|:-----------|:-----------|:-----------|:-----------|:-----------|:-----------|
+| 1             | casual        | 0         | 36.56            | wk0                  | casual riders |
+| 2             | member        | 0         | 14.25            | wk0                  | annual subs   |
+| 3             | member        | 1         | 14.07            | wk1                  | annual subs   |
+| 4             | casual        | 1         | 28.68            | wk1                  | casual riders |
+| 5             | member        | 2         | 11.70            | wk2                  | annual subs   |
+| 6             | casual        | 2         | 22.02            | wk2                  | casual riders |
+| 7             | member        | 3         | 11.75            | wk3                  | annual subs   |
+| 8             | casual        | 3         | 21.06            | wk3                  | casual riders |
+| 9             | member        | 4         | 12.38            | wk4                  | annual subs   |
+| 10            | casual        | 4         | 20.56            | wk4                  | casual riders |
+
+: Cyclistic weekly bike usage
+
+### Cyclistic Weekly Average Bike Usage(WAB) (min)
+
+```{r, fig.width = 8, fig.height=4}
+# to display plots
+WAB <- 
+  ggplot(wk_df, aes(x = ryd_week, y = avg_dur_week, color = subscription), show.legend =  FALSE) +
+  geom_line(size = 0.5, show.legend =  FALSE) +
+  geom_point(size = 2, show.legend =  FALSE) + 
+  facet_wrap(~subscription) + 
+  expand_limits(y = c(0, 50)) +
+  geom_label(data = wk_df%>% filter(avg_dur_week == MAXc), aes(label = MAXc), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = -1,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = wk_df%>% filter(avg_dur_week == MAXm), aes(label = MAXm), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = -1,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  geom_label(data = wk_df%>% filter(avg_dur_week == MINc), aes(label = MINc), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = 1,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  geom_label(data = wk_df%>% filter(avg_dur_week == MINm), aes(label = MINm), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = 1.5,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  geom_label(data = wk_df%>% filter(avg_dur_week == MAXc), aes(label = rd_week), label_size = 0.01,
+    nudge_x = 0.25,
+    nudge_y = 1,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = wk_df%>% filter(avg_dur_week == MINc), aes(label = rd_week), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = 2,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = wk_df%>% filter(avg_dur_week == MAXm), aes(label = rd_week), label_size = 0.01,
+    nudge_x = 0.25,
+    nudge_y = 1,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = wk_df%>% filter(avg_dur_week == MINm), aes(label = rd_week), label_size = 0.01,
+    nudge_x = 0.25,
+    vjust = 2.5,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+
+labs(
+    x = "Ride Week",
+    y = "Average Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic"))
+WAB
+
+```
+
+### Cyclistic Weekly Bike Total Usage For Annual Subscriptions(WBTA) (min)
+
+```{r, fig.width = 5, fig.height=3}
+# To split total weekly duration into annual memberships and  casual riders to get their individual min and max duration 
+
+MAXm1 <- max(member_df %>% select(time))
+MINm1 <- min(member_df %>% select(time))
+
+
+MAXc1 <- max(casual_df %>% select(time))
+MINc1 <- min(casual_df %>% select(time))
+
+
+# to display plot
+WBTA <-
+  ggplot(member_df, aes(x = ryd_week, y = time)) +
+  geom_bar(aes(fill = time),stat = "identity", show.legend =  FALSE, width = 1) +
+  coord_flip() + theme(legend.position="none") +  
+  scale_fill_gradient2(low ="orange",mid = "orange", high = "blue",space ="Lab", guide = "colourbar",
+  aesthetics = "fill") +
+  expand_limits(y = c(0, 125), x =c(0, 50)) +
+  geom_label(data = member_df%>% filter(time == MAXm1), aes(label = MAXm), label_size = 0.01,
+    hjust = -0.21,
+    vjust = 0.2,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+  geom_label(data = member_df%>% filter(time == MINm1), aes(label = MINm), label_size = 0.01,
+    nudge_x = 0.25,
+    nudge_y = 0.05,
+    check_overlap = TRUE, show.legend =  FALSE) +
+   
+  geom_text(data = member_df%>% filter(time == MAXm1), aes(label = rd_week), label_size = 0.01,
+    hjust = -0.49,
+    vjust = 1.5,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+ 
+  labs(
+    x = "Ride Week",
+    y = "Total Weekly Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic"))
+WBTA
+
+```
+
+### Cyclistic Weekly Bike Total Usage For Casual Riders(WBTC)(min)
+
+```{r, fig.width = 5, fig.height=3}
+  
+# to display plot
+WBTC <- 
+  ggplot(casual_df, aes(x = ryd_week, y = time)) +
+  geom_bar(aes(fill = time),stat = "identity", show.legend =  FALSE, width = 1) +
+  coord_flip() + theme(legend.position="none") + 
+  scale_fill_gradient2(low ="#29C5F6",mid = "#FFCD91", high = "#58181F",space ="Lab", guide = "colourbar",
+  aesthetics = "fill") +
+  expand_limits(y = c(0, 295), x =c(0, 50)) +
+  geom_label(data = casual_df%>% filter(time == MAXc1), aes(label = MAXc), label_size = 0.01,
+    hjust = -0.25,
+    vjust = 1.5,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = casual_df%>% filter(time == MINc1), aes(label = MINc), label_size = 0.01,
+    nudge_x = 0.25,
+    nudge_y = 1,
+    check_overlap = TRUE, show.legend =  FALSE) +  
+  geom_text(data = casual_df%>% filter(time == MAXc1), aes(label = rd_week), label_size = 0.01,
+    hjust = -0.49,
+    vjust = 0.5,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+ 
+  labs(
+    x = "Ride Week",
+    y = "Total Weekly Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic"))
+WBTC
+
+```
+
+### Monthly Data Set
+
+```{r}
+mntly_df <- read.csv(url(mntly_data))
+```
+
+`head(mntly_df)`
+
+```{r}
+mntly_df$subscription <- mntly_df$member_casual%>%str_replace_all(c("member" = "annual subs", "casual" = "casual riders"))  
+mntly_df$ryd_mnt <- mntly_df$ryd_month%>%str_replace_all(c("Jan" = "2021-01-01", "Feb" = "2021-02-01", "Mar" = "2021-03-01", "Apr" = "2021-04-01", "May" = "2021-05-01", "Jun" = "2021-06-01", "Jul" = "2021-07-01", "Aug" = "2021-08-01", "Sep" = "2021-09-01", "Oct" = "2021-10-01", "Nov" = "2021-11-01", "Dec" = "2021-12-01"))
+#mntly_df <- arrange(mntly_df, ryd_mnt)  
+mntly_df$ryd_mnt <- as.Date(mntly_df$ryd_mnt, format = "%Y-%m-%d")
+  
+mntly_df$time <- round((mntly_df$total_dur_mnt/ 10000), 2)
+
+head(mntly_df)
+
+```
+
+| Ride Month | Member/Casual | Average Duration | Total Duration | subscription  | Ride Month(adjustted) |
+|:-----------|:-----------|:-----------|:-----------|:-----------|:-----------|
+| Jan        | member        | 12.90            | 1621055        | annual subs   | 2021-01-01            |
+| Jan        | casual        | 26.78            | 2025831        | casual riders | 2021-01-01            |
+| Feb        | member        | 13.78            | 1494415        | annual subs   | 2021-02-01            |
+| Feb        | casual        | 28.48            | 2118231        | casual riders | 2021-02-01            |
+| Mar        | casual        | 30.54            | 3848914        | casual riders | 2021-03-01            |
+| Mar        | member        | 13.76            | 2264671        | annual subs   | 2021-03-01            |
+
+: Cyclistic monthly bike usage
+
+### Cyclistic Monthly Average Bike Usage(min)
+
+```{r, fig.width = 8, fig.height=4}
+manu_df <- mntly_df%>%filter(member_casual == "member")
+Top_manu <- max(manu_df %>% select(avg_dur_mnt))
+
+canu_df <-  mntly_df%>%filter(member_casual == "casual")
+Top_canu <- max(canu_df%>% select(avg_dur_mnt))
+
+
+ggplot(mntly_df, aes(x = ryd_mnt, y = avg_dur_mnt, color = subscription)) +
+  geom_line(size = 0.5, show.legend =  FALSE) +
+  geom_point(size = 2, show.legend =  FALSE) + 
+  facet_wrap(~subscription) +
+  expand_limits(y =c(10, 40)) +
+  scale_x_date(date_breaks = "1 month", date_labels =  "%b")  +  
+  geom_label(data = manu_df%>% filter(avg_dur_mnt == Top_manu), aes(label = Top_manu), label_size = 0.01,
+    hjust = 0.49,
+    vjust = -1,
+    check_overlap = TRUE, show.legend =  FALSE) + 
+  geom_label(data = canu_df%>% filter(avg_dur_mnt == Top_canu), aes(label = Top_canu), label_size = 0.01,
+    nudge_x = 0.25,
+    nudge_y = 3.3,
+    check_overlap = TRUE, show.legend =  FALSE) +  
+  geom_text(data = manu_df%>% filter(avg_dur_mnt == Top_manu), aes(label = ryd_month), label_size = 0.01,
+    hjust = 0.49,
+    vjust = -0.5,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  geom_text(data = canu_df%>% filter(avg_dur_mnt == Top_canu), aes(label = ryd_month), label_size = 0.01,
+    hjust = 0.49,
+    vjust = -0.5,
+    check_overlap = TRUE, show.legend =  FALSE) +
+ 
+  labs(
+    x = "Ride Month",
+    y = "Average Monthly Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic"))
+```
+
+### Cyclistic Monthly Bike Total Usage For Annual Subscriptions(min)
+
+```{r, fig.width = 5, fig.height=4}
+Topt_manu <- max(manu_df %>% select(time))
+
+
+# to display plot
+  ggplot(manu_df, aes(x = ryd_mnt, y = time)) +
+  geom_bar(aes(fill = time),stat = "identity", show.legend =  FALSE, width = 26) +
+  coord_flip() + theme(legend.position="none") +  
+  scale_fill_gradient2(low ="orange",mid = "orange", high = "blue",space ="Lab", guide = "colourbar",
+  aesthetics = "fill") +
+  expand_limits(y = c(0, 450)) +
+  scale_x_date(date_breaks = "1 month", date_labels =  "%b") +               
+  geom_label(data = manu_df%>% filter(time == Topt_manu), aes(label = Topt_manu), label_size = 0.01,
+    hjust = -0.25,
+    vjust = 0.1,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+  geom_text(data = manu_df%>% filter(time == Topt_manu), aes(label = ryd_month), label_size = 0.01,
+    hjust = -0.9,
+    vjust =1.6,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+ 
+  labs(
+    x = "Ride Month",
+    y = "Total Monthly Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic")) 
+ 
+
+```
+
+### Cyclistic Monthly Bike Total Usage For Casual Riders(min)
+
+```{r, fig.width = 6, fig.height=4}
+Topt_canu <- max(canu_df %>% select(time))
+
+
+# to display plot
+  ggplot(canu_df, aes(x = ryd_mnt, y = time)) +
+  geom_bar(aes(fill = time),stat = "identity", show.legend =  FALSE, width = 26) +
+  coord_flip() + theme(legend.position="none") +  
+  scale_fill_gradient2(low ="#29C5F6",mid = "#FFCD91", high = "#58181F",space ="Lab", guide = "colourbar",
+  aesthetics = "fill") +
+  expand_limits(y = c(0, 870)) +
+  scale_x_date(date_breaks = "1 month", date_labels =  "%b") +               
+  geom_label(data = canu_df%>% filter(time == Topt_canu), aes(label = Topt_canu), label_size = 0.01,
+    hjust = -0.29,
+    vjust = 0.05,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+  geom_text(data = canu_df%>% filter(time == Topt_canu), aes(label = ryd_month), label_size = 0.01,
+    hjust = -1.6,
+    vjust = 1.7,
+    check_overlap = TRUE, show.legend =  FALSE) +
+  
+ 
+  labs(
+    x = "Ride Month",
+    y = "Total Monthly Duration (min)") +
+  theme(
+    axis.title.x = element_text(color = "#0099f9", size = 16, face = "bold"),
+    axis.title.y = element_text(color = "#0099f9", size = 16, face = "italic")) 
+ 
+```
+
+### Year's Data Set
+
+```{r}
+yrs_df <- read.csv(url(years_data))
+```
+
+```{r, fig.width = 8}
+yrs_df
+```
+
+| Member/Casual | Average Duration | Total Duration |
+|---------------|------------------|----------------|
+| member        | 13.31            | 33229048       |
+| Casual        | 27.78            | 56000320       |
+
+: Cyclistic's 2021 total bike usage
+
+### [Key findings]{.underline}
+
+casual riders use Cyclistic bikes more than Annual subscribers in terms of average duration. where casual riders used the Cyclistic bikes for 27.78 minutes per year on the average, annual subscribers used Cyclistic bikes for 13.31 minutes on the average as at 31 December 2021
